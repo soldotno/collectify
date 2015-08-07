@@ -34,9 +34,7 @@ const Sources = require('./models/source');
 const httpAgent = new http.Agent();
 httpAgent.maxSockets = 50;
 
-const agentOpts = {
-  agent: httpAgent
-};
+const agentOpts = { agent: httpAgent };
 
 /**
  * Create streams for the channels
@@ -56,12 +54,6 @@ const updatedChannel = interprocess.Transmitter({
   url: config.get('database.redis.url')
 });
 
-const createdChannel = interprocess.Transmitter({
-  channel: 'articles:created',
-  prefix: config.get('database.redis.prefix'),
-  url: config.get('database.redis.url')
-});
-
 const errorChannel = interprocess.Transmitter({
   channel: 'errors',
   prefix: config.get('database.redis.prefix'),
@@ -71,17 +63,8 @@ const errorChannel = interprocess.Transmitter({
 /**
  * Create instances of our
  * mappers/parsers.
- *
- * Here we are going to
- * 
- * - map from templates to arrays of articles
- * - map from url to social shares data
  */
-const jsonMapper = require('json-mapper')({ timeOut: 10000 });
-const feedMapper = require('feed-mapper')({ timeOut: 10000 });
 const siteParser = require('site-parser')({ timeOut: 10000 });
-const socialData = require('social-data')(agentOpts);
-const getKeywordsFromString = require('./helpers/get-keywords-from-string');
 const wrapStreamSource = require('./helpers/wrap-stream-source');
 const inspect = require('./helpers/inspect').bind(null, debug);
 
@@ -99,55 +82,7 @@ const transformToSync = lodash.curry(obtr.transformToSync);
 const copyToFrom = lodash.curry(obtr.copyToFrom);
 const copy = lodash.compose(highland.flip(highland.extend)({}));
 const clone = lodash.compose(JSON.parse, JSON.stringify);
-const getContentFromURL = lodash.curryN(3, lodash.rearg([1, 0, 2], nodeRead))(agentOpts);
-const findOneArticle = lodash.curryN(4, lodash.rearg([2, 1, 0, 3], Articles.findOne.bind(Articles)));
 const findSources = lodash.curryN(4, lodash.rearg([2, 1, 0, 3], Sources.find.bind(Sources)));
-
-/**
- * Function composition shorthands
- * for readability and reuse
- */
-const isExisting = async.compose(
-  asyncify(isTruthy),
-  ::Articles.count,
-  asyncify(lodash.pick('guid'))
-);
-
-const isNotExisting = async.compose(
-  asyncify(highland.not),
-  isExisting
-);
-
-const isTruthy = (x) => !!x;
-
-const addSocialDataFromUrl = deriveTo({
-  shares: {
-    facebook: ['url', socialData.facebook],
-    twitter: ['url', socialData.twitter],
-    linkedin: ['url', socialData.linkedin]
-  }
-});
-
-const updateInDatabase = async.compose(
-  asyncify(isTruthy),
-  ::Articles.update,
-  ::Articles.formatForUpdate(['guid'])
-);
-
-const addContentFromUrl = deriveTo({
-  content: ['url', async.compose(
-    asyncify(lodash.result('content')),
-    getContentFromURL
-  )]
-});
-
-const addKeywordsFromContent = deriveToSync({
-  keywords: ['content', getKeywordsFromString]
-});
-
-const updateTimestamp = deriveToSync({
-  createdAt: [null, Date.now]
-});
 
 /**
  * Create a new event-emitter
@@ -196,195 +131,40 @@ const realSource = highland(wrapStreamSource(queryFunction));
  * our test templates
  * without accessing the
  * database
- *
- * Contains one of each type
- * - feed (rss)
- * - json (api end-point)
- * - site (html)
  */
 const testSource = highland([require('./templates')]);
 
 /**
- * Create a stream
- * from our source
- * of choice
- * 
- * - limit the rate to 1 fetch / 30 seconds
- * - compact and flatten the stream
- * - limit the rate to 10 templates / 1 seconds
- * - emit all errors via the event-emitter
+ * Creating our stream
+ * declaratively
  */
-const sourceStream = realSource
+const sourceStream = testSource
   .ratelimit(1, 30000)
   .compact()
   .flatten()
   .ratelimit(10, 1000)
   .errors(emit('error'))
 
-/**
- * Create a stream that
- * filters all the sources/templates,
- * selects only those of type 'json'.
- *
- * Map all of the templates
- * via the jsonMapper to
- * get a list of articles
- *
- * Process only 5 templates in parallel
- */
-const jsonStream = sourceStream
-  .fork()
-  .filter(lodash.compose(
-    lodash.isEqual('json'),
-    lodash.result('type')
-  ))
-  .map(wrap(::jsonMapper.parse)).parallel(5)
-  .errors(emit('error'))
-
-/**
- * Create a stream that
- * filters all the sources/templates,
- * selects only those of type 'feed'.
- *
- * Map all of the templates
- * via the feedMapper to
- * get a list of articles
- *
- * Process only 5 templates in parallel
- */
-const rssStream = sourceStream
-  .fork()
-  .filter(lodash.compose(
-    lodash.isEqual('feed'),
-    lodash.result('type')
-  ))
-  .map(wrap(::feedMapper.parse)).parallel(5)
-  .errors(emit('error'))
-
-
-/**
- * Create a stream that
- * filters all the sources/templates,
- * selects only those of type 'site'.
- *
- * Map all of the templates
- * via the siteParser to
- * get a list of articles
- *
- * Process only 5 templates in parallel
- */
-const siteStream = sourceStream
+const topStoriesStream = sourceStream
   .fork()
   .filter(lodash.compose(
     lodash.isEqual('site'),
     lodash.result('type')
   ))
   .map(wrap(::siteParser.parse)).parallel(5)
-  .errors(emit('error'))
-
-/**
- * Create a stream that merges
- * all the article streams
- * into a single stream.
- *
- * Flatten the input,
- * so that arrays of articles
- * are converted to a stream
- * of single articles
- *
- * Emit all errors via
- * the event-emitter
- */
-const articleStream = highland([
-    jsonStream,
-    rssStream,
-    siteStream
-  ])
-  .merge()
-  .flatten()
+  .map(x => x[0])
   .compact()
   .errors(emit('error'))
 
-/**
- * Create a stream that
- * filters the articleStream
- * and keeps only the articles
- * that does not already exist
- *
- * - In this case our predicate
- * is that if we get a count === 0
- * for the 'guid' we define it
- * as new
- *
- * Save all the new entries
- * in the database
- *
- * The result is the data
- * passed back from mongoose
- */
-const createdArticleStream = articleStream
+const topStoriesUpdatedStream = topStoriesStream
   .fork()
-  .flatFilter(wrap(isNotExisting))
+  .flatFilter(wrap(::Articles.compareToPrevious))
   .flatMap(wrap(::Articles.create))
   .invoke('toObject')
   .errors(emit('error'))
 
 /**
- * Create a stream that
- * filters the articleStream
- * and keeps only the articles
- * that already exist in the db
- *
- * - In this case our predicate
- * is that if we get a count > 0
- * for the 'guid' we define it
- * as existing
- *
- * We update all the existing
- * entries with
- *
- * - an updated timestamp
- * - social shares data
- *
- * The result is the data
- * passed back from mongoose
- */
-const updatedArticleStream = articleStream
-  .fork()
-  .flatFilter(wrap(isExisting))
-  .map(updateTimestamp)
-  .map(wrap(addSocialDataFromUrl)).parallel(10)
-  .flatFilter(wrap(updateInDatabase))
-  .errors(emit('error'))
-
-/**
- * Create a stream that
- * forks the updatedArticleStream
- * and updates all the entries
- * in the database with
- * 
- * - article / website content
- * - keywords based on the content
- * 
- * (if it does not have it already)
- *
- * The result is the data
- * passed back from mongoose
- * after updating
- */
-const contentAddedStream = updatedArticleStream
-  .fork()
-  .map(lodash.pick('guid'))
-  .flatMap(wrap(findOneArticle({}, '')))
-  .invoke('toObject')
-  .reject(lodash.has('content'))
-  .map(wrap(addContentFromUrl)).parallel(10)
-  .map(addKeywordsFromContent)
-  .flatFilter(wrap(updateInDatabase))
-  .errors(emit('error'))
-
-/**
- * Connect to the database
+ * Connecting to the database
  */
 setup.connectToDatabase(
   mongoose,
@@ -392,46 +172,18 @@ setup.connectToDatabase(
 );
 
 /**
- * Log all the saved
- * articles and the
- * resulting entries in
- * mongodb
- *
- * Pipe all updated articles
- * to the articles:created channel
+ * Handling and starting the streams
  */
-createdArticleStream
+topStoriesStream
   .fork()
-  .doto(inspect('created-stream'))
-  .pipe(createdChannel)
-
-/**
- * Log all the updated
- * articles and the
- * resulting entries in
- * mongodb
- *
- * Pipe all updated articles
- * to the articles:updated channel
- */
-updatedArticleStream
-  .fork()
-  .doto(inspect('updated-stream'))
-  .pipe(updatedChannel)
-
-/**
- * Log all articles
- * updated with content
- */
-contentAddedStream
-  .fork()
-  .doto(inspect('content-added-stream'))
+  .doto(inspect('top-stories-stream'))
   .resume()
 
-/**
- * Pipe all errors
- * to the error channel
- */
+topStoriesUpdatedStream
+  .fork()
+  .doto(inspect('top-stories-updated-stream'))
+  .pipe(updatedChannel)
+
 errorStream
   .doto(inspect('error-stream'))
   .pipe(errorChannel)

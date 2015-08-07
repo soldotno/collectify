@@ -35,15 +35,12 @@ setup.connectToDatabase(
  * a collection of articles
  */
 app.get('/articles', (req, res) => {
-  //..TODO
-});
-
-/**
- * Route for fetching
- * a specific article
- */
-app.get('/articles/:url', (req, res) => {
-  //..TODO
+  Entries
+    .find(req.query)
+    .exec((err, topStories) => {
+      if (err) return res.status(500).send(err);
+      res.send(topStories);
+    });
 });
 
 /**

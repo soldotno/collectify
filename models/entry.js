@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const _ = require('lodash-fp');
 const asap = require('asap');
+const sortedObject = require('sorted-object');
 
 const schema = new mongoose.Schema({
   _ranking: {
@@ -22,16 +23,9 @@ const schema = new mongoose.Schema({
     required: true,
     index: true,
   },
-  guid: {
-    type: String,
-    required: true,
-    unique: true,
-    index: true
-  },
   url: {
     type: String,
     required: true,
-    index: true
   },
   title: {
     type: String,
@@ -39,20 +33,6 @@ const schema = new mongoose.Schema({
   },
   image: {
     type: String
-  },
-  content: {
-    type: String
-  },
-  keywords: {
-    type: [String]
-  },
-  shares: {
-    type: mongoose.Schema.Types.Mixed
-  },
-  posted: {
-    type: Date,
-    default: Date.now,
-    required: true
   },
   createdAt: {
     type: Date,
@@ -78,10 +58,21 @@ schema.set('toJSON', {
   }
 });
 
-schema.statics.formatForUpdate = function(picks) {
-  return (obj, callback) => {
-    asap(callback.bind(this, null, _.pick(picks, obj), obj))
-  };
+schema.statics.compareToPrevious = function(entry, cb) {
+  if (!entry._source) return cb();
+
+  this.findOne({ _source: entry._source })
+    .sort({ createdAt: -1 })
+    .exec(function(err, result) {
+      if (err) return cb(err);
+
+      let normalizedResult = (result || {}).toJSON ? result.toJSON() : {};
+      let formatObject = _.pick(['title', 'image', 'url']);
+      let existingEntry = JSON.stringify(sortedObject(formatObject(normalizedResult)));
+      let newEntry = JSON.stringify(sortedObject(formatObject(entry)));
+
+      cb(null, existingEntry !== newEntry);
+    });
 };
 
 // create the model for articles and return it

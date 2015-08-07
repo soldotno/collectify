@@ -1,84 +1,5 @@
 exports = module.exports = [{
   "active": true,
-  "type": "feed",
-  "name": "TechCrunch",
-  "url": "http://feeds.feedburner.com/TechCrunch//",
-  "template": {
-    "elements": [{
-      "name": "guid",
-      "type": "url",
-      "required": true,
-      "items": [{
-        "selector": "guid"
-      }, {
-        "selector": "link"
-      }, {
-        "selector": "title",
-        "decode": true
-      }]
-    }, {
-      "name": "title",
-      "required": true,
-      "items": [{
-        "selector": "title",
-        "decode": true
-      }]
-    }, {
-      "name": "url",
-      "type": "url",
-      "required": true,
-      "items": [{
-        "selector": "link"
-      }]
-    }, {
-      "name": "image",
-      "type": "url",
-      "items": [{
-        "selector": "enclosures[0].url"
-      }],
-      "fallback": "https://s0.wp.com/wp-content/themes/vip/techcrunch-2013/assets/images/logo.svg"
-    }]
-  }
-}, {
-  "active": true,
-  "type": "json",
-  "name": "Mashable",
-  "url": "http://mashable.com/stories.json?hot_per_page=0&new_per_page=30&rising_per_page=0",
-  "listref": "new",
-  "template": {
-    "elements": [{
-      "name": "guid",
-      "type": "url",
-      "required": true,
-      "items": [{
-        "selector": "link"
-      }]
-    }, {
-      "name": "title",
-      "required": true,
-      "items": [{
-        "selector": "title"
-      }]
-    }, {
-      "name": "url",
-      "type": "url",
-      "required": true,
-      "items": [{
-        "selector": "link"
-      }]
-    }, {
-      "name": "image",
-      "type": "url",
-      "items": [{
-        "selector": "responsive_images[1].image"
-      }, {
-        "selector": "responsive_images[0].image"
-      }],
-      "fallback": "http://rack.1.mshcdn.com/assets/header_share_logo.v2-11a2e0632ddb46b143c85e63f590734d.png"
-    }]
-  }
-}, {
-  "active": true,
   "type": "site",
   "name": "New Yorker",
   "url": "http://www.newyorker.com/",
@@ -87,15 +8,6 @@ exports = module.exports = [{
     "containers": [{
       "selector": "article",
       "elements": [{
-        "name": "guid",
-        "type": "url",
-        "occurence": "first",
-        "required": true,
-        "items": [{
-          "selector": "section h2 a",
-          "attribute": "href"
-        }]
-      }, {
         "name": "url",
         "type": "url",
         "occurence": "first",
