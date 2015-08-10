@@ -13,13 +13,8 @@ A functional streaming news aggregator with real-time distribution. Mostly for e
   * expose the data (articles) stored in the database as a HTTP API
 
 * `websocket-api.js` will
-  * listen for data being piped into the _articles:created_ channel it listens to
+  * listen for data being piped into the _entries:updated_ channel it listens to
   * expose that data real-time as a websocket api
-
-* `error-processing.js` will
-  * listen for data being piped to the _errors_ channel it listens to
-  * collect all error messages from all you processes
-  * handle errors any way you want (just logging for now)
 
 (More docs coming..)
 
@@ -38,9 +33,9 @@ A functional streaming news aggregator with real-time distribution. Mostly for e
 
 export DEBUG="*" \
 export NODE_ENV="development" \
-export MONGO_URL="mongodb://localhost/collectify" \
+export MONGO_URL="mongodb://localhost/toppsaker" \
 export REDIS_URL='redis://localhost:6379' \
-export REDIS_PREFIX='collectify'
+export REDIS_PREFIX='toppsaker'
 
 babel-node --stage 0 collector
 ```
@@ -51,7 +46,7 @@ babel-node --stage 0 collector
 
 export DEBUG="*" \
 export NODE_ENV="development" \
-export MONGO_URL="mongodb://localhost/collectify" \
+export MONGO_URL="mongodb://localhost/toppsaker" \
 
 babel-node --stage 0 api
 ```
@@ -63,19 +58,7 @@ babel-node --stage 0 api
 export DEBUG="*" \
 export NODE_ENV="development" \
 export REDIS_URL='redis://localhost:6379' \
-export REDIS_PREFIX='collectify'
+export REDIS_PREFIX='toppsaker'
 
 babel-node --stage 0 websocket-api
-```
-
-#### Development shellscript example for `error-processing`:
-```sh
-#!/bin/sh
-
-export DEBUG="*" \
-export NODE_ENV="development" \
-export REDIS_URL='redis://localhost:6379' \
-export REDIS_PREFIX='collectify'
-
-babel-node --stage 0 error-processing
 ```
