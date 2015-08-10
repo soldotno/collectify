@@ -12,7 +12,7 @@ const EventEmitter = require('events').EventEmitter;
 const mongoose = require('mongoose');
 const nodeRead = require('node-read');
 const obtr = require('fp-object-transform');
-const interprocess = require('interprocess-push-stream');
+const { Transmitter } = require('interprocess-push-stream');
 
 /**
  * Application-specific modules
@@ -23,7 +23,7 @@ const setup = require('./setup');
 /**
  * Data Models (mongoose)
  */
-const Articles = require('./models/entry');
+const Entries = require('./models/entry');
 const Sources = require('./models/source');
 
 /**
@@ -48,14 +48,8 @@ const agentOpts = { agent: httpAgent };
  * and back-pressure between
  * processes
  */
-const updatedChannel = interprocess.Transmitter({
-  channel: 'articles:updated',
-  prefix: config.get('database.redis.prefix'),
-  url: config.get('database.redis.url')
-});
-
-const errorChannel = interprocess.Transmitter({
-  channel: 'errors',
+const updatesChannel = Transmitter({
+  channel: 'entries:updated',
   prefix: config.get('database.redis.prefix'),
   url: config.get('database.redis.url')
 });
@@ -158,8 +152,8 @@ const topStoriesStream = sourceStream
 
 const topStoriesUpdatedStream = topStoriesStream
   .fork()
-  .flatFilter(wrap(::Articles.compareToPrevious))
-  .flatMap(wrap(::Articles.create))
+  .flatFilter(wrap(::Entries.compareToPrevious))
+  .flatMap(wrap(::Entries.create))
   .invoke('toObject')
   .errors(emit('error'))
 
@@ -182,8 +176,8 @@ topStoriesStream
 topStoriesUpdatedStream
   .fork()
   .doto(inspect('top-stories-updated-stream'))
-  .pipe(updatedChannel)
+  .pipe(updatesChannel)
 
 errorStream
   .doto(inspect('error-stream'))
-  .pipe(errorChannel)
+  .resume()
