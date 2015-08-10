@@ -63,7 +63,7 @@ schema.statics.compareToPrevious = function(entry, cb) {
 
   this.findOne({ _source: entry._source })
     .sort({ createdAt: -1 })
-    .exec(function(err, result) {
+    .exec((err, result) => {
       if (err) return cb(err);
 
       let normalizedResult = (result || {}).toJSON ? result.toJSON() : {};
@@ -73,6 +73,14 @@ schema.statics.compareToPrevious = function(entry, cb) {
 
       cb(null, existingEntry !== newEntry);
     });
+};
+
+schema.statics.findLatest = function(query, cb) {
+  if (!query) return cb();
+
+  this.findOne(query)
+    .sort({ createdAt: -1 })
+    .exec(cb);
 };
 
 // create the model for articles and return it
