@@ -4,6 +4,7 @@
 const debug = require('debug')('collectify:api');
 const http = require('http');
 const express = require('express');
+const highland = require('highland');
 const lodash = require('lodash-fp');
 const async = require('async');
 const util = require('util');
@@ -15,6 +16,12 @@ const app = express();
  */
 const config = require('./config');
 const setup = require('./setup');
+
+/**
+ * Helpers
+ */
+const wrap = ::highland.wrapCallback;
+const wrapStreamSource = require('./helpers/wrap-stream-source');
 
 /**
  * Data Models (mongoose)
@@ -32,15 +39,16 @@ setup.connectToDatabase(
 
 /**
  * Route for fetching
- * a collection of articles
+ * the latest story
+ * from each source
  */
 app.get('/articles', (req, res) => {
-  Entries
-    .find(req.query)
-    .exec((err, topStories) => {
-      if (err) return res.status(500).send(err);
-      res.send(topStories);
-    });
+  highland(wrapStreamSource(::Sources.find)
+    .pick('_source')
+    .map(wrap(::Entries.findLatest))
+    .compact()
+    .toArray(::res.send)
+    .errors(::res.status(500)::res.send);
 });
 
 /**
