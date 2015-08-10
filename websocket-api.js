@@ -9,7 +9,7 @@ const highland = require('highland');
 const lodash = require('lodash-fp');
 const EventEmitter = require('events').EventEmitter;
 const websocket = require('websocket-stream');
-const interprocess = require('interprocess-push-stream');
+const { Receiver, Transmitter } = require('interprocess-push-stream');
 
 /**
  * Application-specific modules
@@ -29,14 +29,8 @@ const inspect = require('./helpers/inspect').bind(null, debug);
  * and back-pressure between
  * processes
  */
-const createdChannel = interprocess.Receiver({
-  channel: 'articles:created',
-  prefix: config.get('database.redis.prefix'),
-  url: config.get('database.redis.url')
-});
-
-const errorChannel = interprocess.Transmitter({
-  channel: 'errors',
+const updatesChannel = Receiver({
+  channel: 'entries:updated',
   prefix: config.get('database.redis.prefix'),
   url: config.get('database.redis.url')
 });
@@ -69,7 +63,7 @@ const errorStream = highland('error', eventEmitter);
  * with the newChannel
  * as the source
  */
-const createdArticles = highland(createdChannel)
+const updatesStream = highland(updatesChannel)
   .compact()
   .flatten()
   .errors(emit('error'))
@@ -80,9 +74,9 @@ const createdArticles = highland(createdChannel)
  * resulting entries in
  * mongodb
  */
-createdArticles
+updatesStream
   .fork()
-  .doto(inspect('publish-live'))
+  .doto(inspect('top-stories-update'))
   .resume()
 
 /**
@@ -91,7 +85,7 @@ createdArticles
  */
 errorStream
   .doto(inspect('error-stream'))
-  .pipe(errorChannel)
+  .resume()
 
 /**
  * Create an http server
@@ -110,7 +104,7 @@ const httpServer = http.createServer()
 const wss = websocket.createServer({
   server: httpServer
 }, (stream) => {
-  let contentStream = createdArticles
+  let contentStream = updatesStream
     .observe()
     .map(JSON.stringify)
     .doto(highland.log)
