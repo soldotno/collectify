@@ -1,6 +1,4 @@
-'use strict';
-
-const debug = require('debug')('collectify:setup');
+const debug = require('debug')('toppsaker:setup');
 
 module.exports.connectToDatabase = function(mongoose, url) {
   mongoose.connection.on('open', function(ref) {
