@@ -1,6 +1,8 @@
 Collectify
 ==========
 
+[![Greenkeeper badge](https://badges.greenkeeper.io/soldotno/collectify.svg)](https://greenkeeper.io/)
+
 #### Introduction:
 A functional streaming news aggregator with real-time distribution. Mostly for educative purposes.
 (uses babel-node to support ES6+).
